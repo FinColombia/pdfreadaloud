@@ -1,10 +1,341 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PDF Read Aloud</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF Read-Aloud</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1f2328;--mute:#6a6f76;--line:#e1ded6;--acc:#2f6fed;--accink:#fff;--hl:#fff1b8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16181c;--card:#20242a;--ink:#e8eaed;--mute:#9aa0a8;--line:#333943;--acc:#6b9bff;--accink:#10151f;--hl:#4a4217}}
+:root[data-theme="dark"]{--bg:#16181c;--card:#20242a;--ink:#e8eaed;--mute:#9aa0a8;--line:#333943;--acc:#6b9bff;--accink:#10151f;--hl:#4a4217}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;cursor:pointer}
+#drop.over{border-color:var(--acc)}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:10px;cursor:pointer}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
+select,input[type=range]{width:100%}
+select{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+#reader{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
+.seg{padding:6px 8px;border-radius:8px;cursor:pointer}
+.seg:hover{background:var(--bg)}
+.seg.on{background:var(--hl)}
+.seg.gap{margin-top:10px}
+textarea{width:100%;min-height:180px;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.note{font-size:13px;color:var(--mute)}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;margin:4px 0}
+</style>
 </head>
 <body>
+<main>
+<h1>PDF Read-Aloud</h1>
+<p class="sub">Open any PDF and listen to it in a British voice. Everything stays on your device.</p>
+
+<div class="card">
+  <div id="drop" tabindex="0">
+    <strong>Choose a PDF</strong> or drop it here<br>
+    <span class="note">From Google Drive: open the file, download it, then pick it here (or use Drive for desktop).</span>
+  </div>
+  <input id="file" type="file" accept="application/pdf" hidden>
+  <p class="note" id="status" style="margin:10px 0 0"></p>
+</div>
+
+<div class="card">
+  <div class="grid">
+    <div><label for="voice">Voice</label><select id="voice"></select></div>
+    <div><label>Speed <span id="rv">0.9</span>x</label><input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.9"></div>
+    <div><label>Pitch (higher = younger) <span id="pv">1.2</span></label><input id="pitch" type="range" min="0.7" max="1.8" step="0.05" value="1.2"></div>
+    <div><label>Pause between items <span id="gv">0.8</span>s</label><input id="gap" type="range" min="0" max="3" step="0.1" value="0.8"></div>
+  </div>
+  <div style="margin-top:10px">
+    <div class="chk"><input type="checkbox" id="oLet" checked><label for="oLet" style="margin:0;color:inherit">Read answer options as “Option A…”, numbers as “Question 1…”</label></div>
+    <div class="chk"><input type="checkbox" id="oPg" checked><label for="oPg" style="margin:0;color:inherit">Skip “Page 1 of 2” lines</label></div>
+  </div>
+  <p class="note" id="vnote" style="margin:8px 0 0"></p>
+</div>
+
+<div class="card">
+  <div class="row" style="margin-bottom:10px">
+    <button class="p" id="play" disabled>▶ Play</button>
+    <button id="pause" disabled>⏸ Pause</button>
+    <button id="stop" disabled>⏹ Stop</button>
+    <button id="prev" disabled>⏮</button>
+    <button id="next" disabled>⏭</button>
+    <button id="test">Test voice</button>
+  </div>
+  <div id="reader"><span class="note">The text will appear here. Tap any line to start reading from it.</span></div>
+  <details style="margin-top:12px"><summary>Edit the text before reading</summary>
+    <p class="note">Fix scanning mistakes or remove lines, then press “Apply edits”.</p>
+    <textarea id="raw"></textarea>
+    <div class="row" style="margin-top:8px"><button id="apply">Apply edits</button></div>
+  </details>
+</div>
+<div class="card">
+  <strong>Create an MP3 (free, no account or API key)</strong>
+  <p class="note">Runs a free AI voice (Kokoro) inside your browser. The first time, it downloads the voice model (about 90 MB; your browser then remembers it). The PDF text never leaves your computer. Uses the speed, pitch and pause settings above; the pitch slider is applied gently.</p>
+  <div class="grid" style="margin-top:8px">
+    <div><label for="kvoice">MP3 voice (British)</label><select id="kvoice">
+      <option value="bf_emma">Emma – female (best quality)</option>
+      <option value="bf_lily">Lily – female (lighter, younger)</option>
+      <option value="bf_alice">Alice – female</option>
+      <option value="bf_isabella">Isabella – female</option>
+      <option value="bm_george">George – male</option>
+      <option value="bm_fable">Fable – male</option>
+      <option value="bm_daniel">Daniel – male</option>
+      <option value="bm_lewis">Lewis – male</option>
+    </select></div>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button class="p" id="mp3" disabled>🎧 Generate MP3</button>
+    <button id="cancel" disabled>Cancel</button>
+    <button id="vprev">Preview voice</button>
+  </div>
+  <progress id="pbar" value="0" max="100" style="width:100%;margin-top:10px;display:none"></progress>
+  <p class="note" id="mstat" style="margin:6px 0 0"></p>
+  <audio id="aud" controls style="width:100%;margin-top:10px;display:none"></audio>
+  <p style="margin:8px 0 0"><a id="dl" style="display:none" download="reading.mp3">⬇ Download MP3</a></p>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var synth=window.speechSynthesis, voices=[], segs=[], idx=0, playing=false, token=0, timer=null, rawText="",pdfName="reading";
+if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}
+if(!synth){$("status").textContent="This browser has no speech support. Try Chrome, Edge or Safari.";}
+
+/* ---------- voices ---------- */
+function score(v){
+  var s=0,n=(v.name+" "+v.voiceURI).toLowerCase();
+  if(/en[-_]gb/i.test(v.lang))s+=100; else if(/^en/i.test(v.lang))s+=10;
+  if(/natural|neural|online|premium|enhanced/.test(n))s+=60;
+  if(/google uk english female|serena|kate|martha|libby|sonia|maisie|hazel|stephanie|daniel|arthur/.test(n))s+=30;
+  if(/female|libby|maisie|sonia|serena|kate/.test(n))s+=5;
+  if(/espeak|compact/.test(n))s-=40;
+  return s;
+}
+function loadVoices(){
+  voices=(synth?synth.getVoices():[]).filter(function(v){return /^en/i.test(v.lang)});
+  voices.sort(function(a,b){return score(b)-score(a)});
+  var sel=$("voice"),keep=sel.value;sel.innerHTML="";
+  voices.forEach(function(v,i){var o=document.createElement("option");o.value=i;o.textContent=v.name+" ("+v.lang+")";sel.appendChild(o)});
+  if(keep&&sel.querySelector('option[value="'+keep+'"]'))sel.value=keep;
+  var best=voices[0];
+  $("vnote").textContent=!best?"No English voices found on this device.":/en[-_]gb/i.test(best.lang)?"Best British voice selected automatically. Voices marked Natural/Online sound the most human.":"No British (en-GB) voice found on this device. Add one in your system’s speech settings, or try Edge/Chrome.";
+}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}
+["rate","pitch","gap"].forEach(function(k){$(k).oninput=function(){$({rate:"rv",pitch:"pv",gap:"gv"}[k]).textContent=this.value}});
+
+/* ---------- PDF ---------- */
+function setStatus(t){$("status").textContent=t}
+async function readPdf(file){
+  if(!window.pdfjsLib){setStatus("PDF library failed to load. Check your connection.");return}
+  stopAll();setStatus("Reading “"+file.name+"”…");
+  try{
+    var pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+    var out=[];
+    for(var p=1;p<=pdf.numPages;p++){
+      var tc=await (await pdf.getPage(p)).getTextContent(),lines=[],cur="",y=null;
+      tc.items.forEach(function(it){
+        var yy=Math.round(it.transform[5]);
+        if(y!==null&&Math.abs(yy-y)>3){lines.push(cur);cur=""}
+        cur+=it.str+(it.hasEOL?" ":"");y=yy;
+      });
+      lines.push(cur);out.push(lines.join("\n"));
+    }
+    rawText=out.join("\n");
+    if(rawText.replace(/\s/g,"").length<20){setStatus("This PDF looks like a scan (no text inside), so it can’t be read aloud.");return}
+    $("raw").value=rawText;build();
+    pdfName=file.name.replace(/\.pdf$/i,"");setStatus("Loaded “"+file.name+"” — "+pdf.numPages+" page(s). Press Play.");
+  }catch(e){setStatus("Couldn’t open that PDF: "+(e.message||e))}
+}
+$("drop").onclick=function(){$("file").click()};
+$("drop").onkeydown=function(e){if(e.key==="Enter"||e.key===" ")$("file").click()};
+$("file").onchange=function(){if(this.files[0])readPdf(this.files[0])};
+["dragover","dragenter"].forEach(function(t){$("drop").addEventListener(t,function(e){e.preventDefault();this.classList.add("over")})});
+["dragleave","drop"].forEach(function(t){$("drop").addEventListener(t,function(e){e.preventDefault();this.classList.remove("over")})});
+$("drop").addEventListener("drop",function(e){var f=e.dataTransfer.files[0];if(f)readPdf(f)});
+
+/* ---------- text -> segments ---------- */
+function build(){
+  var lines=$("raw").value.split("\n").map(function(l){return l.replace(/\s+/g," ").trim()}).filter(Boolean);
+  var res=[];
+  lines.forEach(function(l){
+    var shown=l,say=l,newItem=false;
+    if($("oPg").checked&&/^page\s*\d+\s*(of\s*\d+)?$/i.test(l))return;
+    if($("oLet").checked){
+      var m=l.match(/^\(?([a-d])[.)]\s+(.*)/i),q=l.match(/^(\d{1,2})[.)]\s+(.*)/),r=l.match(/^(part\s+[a-z])\s*:/i),o=l.match(/^option\s+(i{1,3}|iv)\./i);
+      if(m){say="Option "+m[1].toUpperCase()+". "+m[2]}
+      else if(q){say="Question "+q[1]+". "+q[2];newItem=true}
+      else if(r||o){newItem=true}
+    }
+    if(/^(part [a-z]|option (i|ii|iii|iv)\.)/i.test(l))newItem=true;
+    var parts=say.match(/[^.!?]+[.!?]+["”)]*|[^.!?]+$/g)||[say];
+    var buf="";
+    parts.forEach(function(s){
+      if((buf+s).length>220&&buf){res.push({t:buf.trim(),gap:false,show:buf.trim()});buf=""}
+      buf+=s;
+    });
+    if(buf.trim())res.push({t:buf.trim(),gap:false,show:buf.trim()});
+    if(res.length&&newItem){
+      // mark first segment of this line as start of a new item
+      var firstIdx=res.length-Math.max(1,parts.length>1?1:1);
+      for(var k=res.length-1;k>=0;k--){if(!res[k].start&&k===res.length-1||false){}}
+    }
+    if(newItem){var first=res.length-countSegs(say);if(first>=0&&res[first])res[first].start=true}
+  });
+  segs=res;idx=0;render();
+  ["play","next","prev","stop","pause","mp3"].forEach(function(k){$(k).disabled=!segs.length});
+}
+function countSegs(s){var parts=s.match(/[^.!?]+[.!?]+["”)]*|[^.!?]+$/g)||[s],n=0,buf="";parts.forEach(function(x){if((buf+x).length>220&&buf){n++;buf=""}buf+=x});if(buf.trim())n++;return n}
+function render(){
+  var box=$("reader");box.innerHTML="";
+  segs.forEach(function(s,i){
+    var d=document.createElement("div");d.className="seg"+(s.start?" gap":"");d.id="s"+i;d.textContent=s.show;
+    d.onclick=function(){stopAll();idx=i;play()};box.appendChild(d);
+  });
+}
+function mark(){
+  var old=document.querySelector(".seg.on");if(old)old.classList.remove("on");
+  var el=$("s"+idx);if(el){el.classList.add("on");el.scrollIntoView({block:"nearest",behavior:"smooth"})}
+}
+
+/* ---------- speech ---------- */
+function utter(text){
+  var u=new SpeechSynthesisUtterance(text),v=voices[$("voice").value];
+  if(v){u.voice=v;u.lang=v.lang}else u.lang="en-GB";
+  u.rate=parseFloat($("rate").value);u.pitch=parseFloat($("pitch").value);return u;
+}
+function play(){
+  if(!synth||!segs.length)return;
+  playing=true;var my=++token;mark();
+  var u=utter(segs[idx].t);
+  u.onend=function(){
+    if(my!==token||!playing)return;
+    idx++;
+    if(idx>=segs.length){playing=false;idx=0;setStatus("Finished.");return}
+    var extra=segs[idx].start?1.0:0.35,wait=(parseFloat($("gap").value)*(segs[idx].start?1:0.4)+0.15)*1000*extra;
+    timer=setTimeout(function(){if(my===token&&playing)play()},wait);
+  };
+  u.onerror=function(e){if(my===token&&playing&&e.error!=="interrupted"&&e.error!=="canceled"){playing=false;setStatus("Speech error: "+e.error)}};
+  synth.cancel();synth.speak(u);
+}
+function stopAll(){playing=false;token++;clearTimeout(timer);if(synth)synth.cancel()}
+$("play").onclick=function(){stopAll();play()};
+$("pause").onclick=function(){
+  if(playing){stopAll();this.textContent="▶ Resume"}
+  else if(segs.length){this.textContent="⏸ Pause";play()}
+};
+$("stop").onclick=function(){stopAll();idx=0;$("pause").textContent="⏸ Pause";mark()};
+$("next").onclick=function(){var was=playing;stopAll();idx=Math.min(segs.length-1,idx+1);mark();if(was)play()};
+$("prev").onclick=function(){var was=playing;stopAll();idx=Math.max(0,idx-1);mark();if(was)play()};
+$("apply").onclick=function(){stopAll();build();setStatus("Edits applied.")};
+$("oLet").onchange=$("oPg").onchange=function(){if($("raw").value){stopAll();build()}};
+$("test").onclick=function(){
+  if(!synth)return;stopAll();
+  synth.speak(utter("Hello! This is how I sound. Question one. Which tool should Sofia use to send her teacher a message?"));
+};
+
+window.__app={segs:function(){return segs},name:function(){return pdfName}};
+window.addEventListener("beforeunload",function(){if(synth)synth.cancel()});
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<script type="module">
+const $=id=>document.getElementById(id);
+let tts=null,cancel=false,busy=false;
+const files={};
+function setP(v){const p=$("pbar");p.style.display="block";p.value=v}
+async function getModel(){
+  if(tts)return tts;
+  $("mstat").textContent="Loading voice engine…";
+  let mod;
+  try{mod=await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm")}
+  catch(e){throw new Error("Couldn’t load the voice engine. Check your internet connection and that scripts from cdn.jsdelivr.net aren’t blocked.")}
+  tts=await mod.KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX",{
+    dtype:"q8",device:"wasm",
+    progress_callback:d=>{
+      if(d&&d.status==="progress"&&d.file){
+        files[d.file]=d;let tot=0,got=0;
+        for(const k in files){tot+=files[k].total||0;got+=files[k].loaded||0}
+        if(tot){setP(got/tot*100);$("mstat").textContent="Downloading voice model… "+Math.round(got/1048576)+" / "+Math.round(tot/1048576)+" MB"}
+      }
+    }});
+  $("pbar").style.display="none";return tts;
+}
+function pitchK(){const p=parseFloat($("pitch").value);return Math.max(0.85,Math.min(1.3,1+(p-1)*0.6))}
+function resample(f,k){
+  if(Math.abs(k-1)<0.005)return f;
+  const n=Math.floor(f.length/k),o=new Float32Array(n);
+  for(let i=0;i<n;i++){const p=i*k,a=Math.floor(p),b=Math.min(a+1,f.length-1),t=p-a;o[i]=f[a]*(1-t)+f[b]*t}
+  return o;
+}
+async function speak(text){
+  const k=pitchK(),m=await getModel();
+  const out=await m.generate(text,{voice:$("kvoice").value,speed:Math.max(0.5,Math.min(2,parseFloat($("rate").value)/k))});
+  return {data:resample(out.audio,k),sr:out.sampling_rate};
+}
+function toInt16(f){const o=new Int16Array(f.length);for(let i=0;i<f.length;i++){const v=Math.max(-1,Math.min(1,f[i]));o[i]=v<0?v*32768:v*32767}return o}
+function encodeMp3(f,sr){
+  const enc=new lamejs.Mp3Encoder(1,sr,96),pcm=toInt16(f),parts=[];
+  for(let i=0;i<pcm.length;i+=1152){const b=enc.encodeBuffer(pcm.subarray(i,i+1152));if(b.length)parts.push(new Uint8Array(b))}
+  const e=enc.flush();if(e.length)parts.push(new Uint8Array(e));
+  return new Blob(parts,{type:"audio/mpeg"});
+}
+function encodeWav(f,sr){
+  const pcm=toInt16(f),buf=new ArrayBuffer(44+pcm.length*2),v=new DataView(buf);
+  const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  w(0,"RIFF");v.setUint32(4,36+pcm.length*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++)v.setInt16(44+i*2,pcm[i],true);
+  return new Blob([buf],{type:"audio/wav"});
+}
+function setBusy(b){busy=b;$("mp3").disabled=b||!window.__app.segs().length;$("cancel").disabled=!b;$("vprev").disabled=b}
+$("cancel").onclick=()=>{cancel=true;$("mstat").textContent="Cancelling…"};
+$("vprev").onclick=async()=>{
+  try{
+    setBusy(true);$("mstat").textContent="Preparing preview…";
+    const r=await speak("Hello! This is how I sound. Question one. Which tool should Sofia use to send her teacher a message?");
+    const ctx=new (window.AudioContext||window.webkitAudioContext)(),buf=ctx.createBuffer(1,r.data.length,r.sr);
+    buf.copyToChannel(r.data,0);const src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);src.start();
+    $("mstat").textContent="Playing preview…";
+  }catch(e){$("mstat").textContent=e.message||String(e)}
+  setBusy(false);
+};
+$("mp3").onclick=async()=>{
+  const segs=window.__app.segs();if(!segs.length)return;
+  cancel=false;setBusy(true);$("dl").style.display="none";$("aud").style.display="none";
+  try{
+    await getModel();
+    const g=parseFloat($("gap").value),chunks=[];let sr=24000,total=0,t0=Date.now();
+    for(let i=0;i<segs.length;i++){
+      if(cancel)throw new Error("Cancelled.");
+      const r=await speak(segs[i].t);sr=r.sr;chunks.push(r.data);total+=r.data.length;
+      const nxt=segs[i+1],gap=nxt?(g*(nxt.start?1:0.4)+0.15):0.5,sil=new Float32Array(Math.round(gap*sr));
+      chunks.push(sil);total+=sil.length;
+      setP((i+1)/segs.length*100);
+      const el=(Date.now()-t0)/1000,eta=Math.round(el/(i+1)*(segs.length-i-1));
+      $("mstat").textContent="Creating audio… "+(i+1)+" of "+segs.length+(eta>2?" (about "+eta+" s left)":"");
+    }
+    const all=new Float32Array(total);let o=0;for(const c of chunks){all.set(c,o);o+=c.length}
+    $("mstat").textContent="Saving file…";
+    let blob,ext="mp3";
+    if(window.lamejs){blob=encodeMp3(all,sr)}else{blob=encodeWav(all,sr);ext="wav"}
+    const url=URL.createObjectURL(blob),a=$("aud");a.src=url;a.style.display="block";
+    const dl=$("dl");dl.href=url;dl.download=window.__app.name()+"."+ext;dl.textContent="⬇ Download "+ext.toUpperCase();dl.style.display="inline";
+    $("mstat").textContent="Done ("+(blob.size/1048576).toFixed(1)+" MB)"+(ext==="wav"?" — saved as WAV because the MP3 encoder didn’t load.":".");
+  }catch(e){$("mstat").textContent=e.message||String(e)}
+  $("pbar").style.display="none";setBusy(false);
+};
+</script>
 </body>
 </html>
